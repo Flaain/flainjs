@@ -1,6 +1,6 @@
 import { MAX_TASK_RETRIES, THRESHOLD } from "./model/constants";
 import { Attributes, FLACT_ERRORS, FLACT_NODE, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, Task, V_NODE } from "./model/types";
-import { arrayfy, flat } from "./utils";
+import { arrayfy, createTask, flat } from "./utils";
 
 export const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
     {
@@ -21,7 +21,7 @@ export const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
     }
 );
 
-export const createElement = (type: keyof HTMLElementTagNameMap, props?: Attributes, ...children: Array<FLACT_NODE>): V_NODE => {
+export const createElement = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...children: Array<FLACT_NODE>): V_NODE => {
     props = props || {};
     children = flat(arrayfy(props?.children || children))
   
@@ -36,7 +36,6 @@ export const render = (vnode: V_NODE, node: HTMLElement) => {
     scheduler(createTask(() => console.log('test'), PRIORITY_LEVEL.IMMEDIATE));
 };
 
-// clean queue from tasks
 export const flush = () => {
     _INTERNAL_STATE.scheduler.expires_at = performance.now() + THRESHOLD;
     
@@ -44,9 +43,7 @@ export const flush = () => {
 
     while (t && !shouldYield()) {
         try {
-            const { callback } = t;
-
-            const next = callback();
+            const { callback } = t, next = callback();
 
             next ? (t.callback = next) : _INTERNAL_STATE.scheduler.queue.shift();
         } catch (error) {
@@ -61,20 +58,16 @@ export const flush = () => {
 }
 
 export const scheduler = (t: Task) => {
-    let i = 0;
-
-    while (i < _INTERNAL_STATE.scheduler.queue.length && _INTERNAL_STATE.scheduler.queue[i].priority <= t.priority) {
-        if (_INTERNAL_STATE.scheduler.queue[i].priority === t.priority) break;
-        
-        i++;
-    }
-
-    _INTERNAL_STATE.scheduler.queue.splice(i, 0, t);
+    let l = 0, h = _INTERNAL_STATE.scheduler.queue.length;
     
-    task(t.priority)();
+    while (l < h) {
+        const m = (l + h) >> 1;
+        
+        _INTERNAL_STATE.scheduler.queue[m].priority < t.priority ? (l = m + 1) : (h = m);
+    }
+    
+    _INTERNAL_STATE.scheduler.queue.splice(l, 0, t);
 }
-
-export const createTask = (callback: () => void, priority: PRIORITY_LEVEL): Task => ({ callback, priority, retries: 0, created_at: Date.now() });
 
 export const task = (priority?: PRIORITY_LEVEL) => {
     if (priority === PRIORITY_LEVEL.IMMEDIATE && typeof queueMicrotask !== "undefined") return () => queueMicrotask(flush);
@@ -91,3 +84,9 @@ export const task = (priority?: PRIORITY_LEVEL) => {
 }
 
 export const shouldYield = () => !!_INTERNAL_STATE.scheduler.expires_at && performance.now() >= _INTERNAL_STATE.scheduler.expires_at;
+
+export const reconciliation = (fiber: Fiber) => {
+    while (fiber && !shouldYield()) {};
+
+    return fiber ? () => reconciliation(fiber) : null;
+}
