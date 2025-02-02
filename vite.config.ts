@@ -3,8 +3,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
     esbuild: {
-        jsxFactory: "createElement",
-        jsxInject: `import { createElement } from '/src/shared/lib/flact'`,
+        jsxFactory: "h",
+        jsxInject: `import { h, Fragment } from '/src/shared/lib/flact'`,
+        jsxFragment: 'Fragment'
     },
     resolve: {
         alias: {

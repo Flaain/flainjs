@@ -1,4 +1,18 @@
-export type V_NODE_TYPE = keyof HTMLElementTagNameMap | '#text';
+export interface FC<P extends Attributes = {}> {
+    (props: P): V_NODE<P> | null;
+    fiber?: Fiber;
+    type?: string;
+    memo?: boolean;
+    shouldUpdate?: (newProps: P, oldProps: P) => boolean;
+}
+
+export interface Action {
+    type: Exclude<EFFECT_TAG, EFFECT_TAG.DIRTY | EFFECT_TAG.SVG>;
+    element?: Fiber;
+    before?: Fiber;
+}
+
+export type V_NODE_TYPE = keyof HTMLElementTagNameMap | "#text" | "root" | "svg" | FC;
 
 export enum PRIORITY_LEVEL {
     NO = 0,
@@ -6,16 +20,20 @@ export enum PRIORITY_LEVEL {
     USER_BLOCK = 1 << 1,
     NORMAL = 1 << 2,
     LOW = 1 << 3,
-    IDLE = 1 << 4
+    IDLE = 1 << 4,
 }
 
 export enum EFFECT_TAG {
-    PLACEMENT = 0,
-    UPDATE = 1,
-    DELETION = 1 << 1
+    UPDATE = 1 << 1,
+    INSERT = 1 << 2,
+    REMOVE = 1 << 3,
+    SVG = 1 << 4,
+    DIRTY = 1 << 5,
+    MOVE = 1 << 6,
+    REPLACE = 1 << 7,
 }
 
-export type WithLastElement = HTMLElement & { last?: Fiber | null }
+export type WithLastElement = HTMLElement & { last?: Fiber | null };
 export type FLACT_NODE = V_NODE | Array<V_NODE> | string | number | boolean | null | undefined;
 
 export interface Attributes extends Record<string, any> {
@@ -40,25 +58,27 @@ export interface Task {
 export interface Fiber<P extends Attributes = any> {
     key?: null | string;
     type: V_NODE_TYPE;
-    node: WithLastElement;
+    node: any;
     kids?: any;
     is_dirty: boolean;
-    effect_tag: EFFECT_TAG;
+    effect_tag?: EFFECT_TAG;
     parent?: Fiber<P>;
+    parent_node?: WithLastElement;
     sibling?: Fiber<P>;
     child?: Fiber<P>;
     done?: () => void;
     // ref: ;
     // hooks: ;
-    old_props: P;
-    action: any;
-    props: P;
-    lane: number;
-    is_comp: boolean;
+    old_props?: P;
+    action?: any;
+    props?: P;
+    lane?: number;
+    is_comp?: boolean;
 }
 
 export enum FLACT_ERRORS {
-    INTERNAL_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in INTERNAL_STATE\nAllowed properties: root_fiber, current_fiber",
+    INTERNAL_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in INTERNAL_STATE\nAllowed properties: root_fiber, current_fiber, scheduler",
+    APP_CONTAINER = "App container is missing",
 }
 
 export interface INTERNAL_STATE {
@@ -68,5 +88,5 @@ export interface INTERNAL_STATE {
         queue: Array<Task>;
         channel: MessageChannel | null;
         expires_at: number;
-    }
+    };
 }

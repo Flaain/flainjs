@@ -1,14 +1,14 @@
 import { _INTERNAL_STATE, render } from "./shared/lib/flact";
 
 const App = () => {
-    return (
-        <div>
-            test
-        </div>
-    )
-}
+    return <div><span>test</span></div>;
+};
 
-render(<div>
-    <App />
-    nested component
-</div>, document.getElementById('app')!)
+const Comp = ({ children }) => <section>{children}</section>;
+
+render(
+    <div onClick={() => console.log('test')}>
+        nested component
+    </div>,
+    document.getElementById("app")!
+);
