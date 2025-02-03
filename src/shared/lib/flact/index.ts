@@ -126,8 +126,8 @@ export const diff = (old_ch: any, new_ch: any) => {
 
         if (old_elm === null) {
             i += 1;
-        } else if (j >= new_ch.length || i >= old_ch.length) {
-            j >= new_ch.length ? (removeElement(old_elm), (i += 1)) : (actions.push({ type: EFFECT_TAG.INSERT, element: new_elm }), (j += 1));
+        } else if (j >= new_l || i >= old_l) {
+            j >= new_l ? (removeElement(old_elm), (i += 1)) : (actions.push({ type: EFFECT_TAG.INSERT, element: new_elm }), (j += 1));
         } else if (getKey(old_elm) === getKey(new_elm)) {
             clone(old_elm, new_elm);
 
