@@ -8,11 +8,10 @@ export interface FC<P extends Attributes = {}> {
 
 export interface Action {
     type: Exclude<EFFECT_TAG, EFFECT_TAG.DIRTY | EFFECT_TAG.SVG>;
-    element?: Fiber;
     before?: Fiber;
 }
 
-export type V_NODE_TYPE = keyof HTMLElementTagNameMap | "#text" | "root" | "svg" | FC;
+export type V_NODE_TYPE = keyof HTMLElementTagNameMap | "text" | "root" | "svg" | FC;
 
 export enum PRIORITY_LEVEL {
     NO = 0,
@@ -59,18 +58,18 @@ export interface Fiber<P extends Attributes = any> {
     key?: null | string;
     type: V_NODE_TYPE;
     node: any;
-    kids?: any;
+    children?: any;
     is_dirty: boolean;
     effect_tag?: EFFECT_TAG;
     parent?: Fiber<P>;
     parent_node?: WithLastElement;
     sibling?: Fiber<P>;
     child?: Fiber<P>;
+    alternate?: Fiber<P>;
     done?: () => void;
     // ref: ;
     // hooks: ;
-    old_props?: P;
-    action?: any;
+    action?: Action | null;
     props?: P;
     lane?: number;
     is_comp?: boolean;

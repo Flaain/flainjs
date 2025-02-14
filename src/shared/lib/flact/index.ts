@@ -1,6 +1,6 @@
 import { MAX_TASK_RETRIES, THRESHOLD } from "./model/constants";
 import { Action, Attributes, EFFECT_TAG, FLACT_ERRORS, FLACT_NODE, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, Task, V_NODE } from "./model/types";
-import { arrayfy, createTask, flat, getKey, isFunction, isPrimitive } from "./utils";
+import { arrayfy, createTask, flat, getKey, handleFCreturn, isFunction, isPrimitive } from "./utils";
 
 export const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
     {
@@ -23,19 +23,23 @@ export const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
 
 export const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...children: Array<V_NODE>): V_NODE => {
     props = props || {};
-    children = flat(arrayfy(props?.children || children));
-  
+    children = flat(arrayfy(props.children || children));
+
+    const key = props.key ?? null;
+
+    props.key && (props.key = undefined);
+
     if (children.length) props.children = (children.length > 1 ? children : children[0]);
-  
-    return { type, props };
+
+    return { type, key, props };
 }
 
 export const render = (vnode: V_NODE, node: HTMLElement) => {
     if (!node) throw new Error(FLACT_ERRORS.APP_CONTAINER);
 
     _INTERNAL_STATE.root_fiber = { type: 'root', node, is_dirty: true, props: { children: vnode } };
-console.log(_INTERNAL_STATE.root_fiber)
-    // scheduler(createTask(() => reconciliation(_INTERNAL_STATE.root_fiber!), PRIORITY_LEVEL.IMMEDIATE));
+    console.log(_INTERNAL_STATE.root_fiber)
+    scheduler(createTask(() => reconciliation(_INTERNAL_STATE.root_fiber!), PRIORITY_LEVEL.IMMEDIATE));
 };
 
 export const Fragment = ({ children }: Pick<Attributes, 'children'>) => children;
@@ -96,25 +100,40 @@ export const scheduleTask = (priority?: PRIORITY_LEVEL) => {
 
 export const shouldYield = () => performance.now() >= _INTERNAL_STATE.scheduler.expires_at;
 
-export const capture = (fiber: Fiber) => {
-    (fiber.is_comp = isFunction(fiber.type)) ? updateHook(fiber) : updateHost(fiber);
-    
-    if (fiber.child) return fiber.child;
-    
-    return getSibling(fiber);
+export const getParentNode = (fiber?: Fiber) => {
+    while (fiber = fiber?.parent) if (!fiber.is_comp) return fiber.node;
+}
+
+export const reconcileChildren = (fiber: Fiber) => {
+    const old_ch = fiber.children ?? [], new_ch = (fiber.children = arrayfy(isFunction(fiber.type) ? handleFCreturn((fiber as any).type(fiber.props)) : fiber.props.children));
+
+    diff(old_ch, new_ch);
+
+    for (let i = 0, prev: Fiber = null!; i < new_ch.length; i += 1) {
+        const child = new_ch[i];
+
+        fiber.lane! & EFFECT_TAG.SVG && (child.lane |= EFFECT_TAG.SVG);
+
+        child.parent = fiber;
+
+        i ? (prev.sibling = child) : (fiber.child = child);
+
+        prev = child;
+    }
 };
 
-export const getParentNode = (fiber: Fiber) => {
-    while (fiber = fiber.parent) {
-        if (!fiber.is_comp) return fiber.node;
-    }
-}
-export const reconcileChildren = () => {};
-export const clone = (a: any, b: any) => {};
+export const clone = (a: any, b: any) => {
+    b.hooks = a.hooks;
+    b.ref = a.ref;
+    b.node = a.node;
+    b.children = a.children;
+    b.alternate = a;
+};
+
 export const removeElement = (fiber: Fiber) => {};
 
-export const diff = (old_ch: any, new_ch: any) => {
-    const actions: Array<Action> = [], old_map: Record<string, any> = {}, new_map: Record<string, any> = {}, old_l = old_ch.length, new_l = new_ch.length;
+export const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
+    const old_map: Record<string, any> = {}, new_map: Record<string, any> = {}, old_l = old_ch.length, new_l = new_ch.length;
     
     let i = 0, j = 0;
 
@@ -122,33 +141,30 @@ export const diff = (old_ch: any, new_ch: any) => {
     for (let i = 0; i < new_l; i += 1) new_map[getKey(new_ch[i])] = i;
 
     while (i < old_l || j < new_l) {
-        const old_elm = old_ch[i], new_elm = new_ch[j], new_elm_in_old = old_map[getKey(new_elm)], has_old = typeof new_map[getKey(old_elm)] !== "undefined";
+        const old_elm = old_ch[i], new_elm = new_ch[j], new_elm_in_old = old_map[getKey(new_elm)], has_old = typeof new_map?.[getKey(old_elm)] !== "undefined";
 
         if (old_elm === null) {
             i += 1;
         } else if (j >= new_l || i >= old_l) {
-            j >= new_l ? (removeElement(old_elm), (i += 1)) : (actions.push({ type: EFFECT_TAG.INSERT, element: new_elm }), (j += 1));
+            j >= new_l ? (removeElement(old_elm), (i += 1)) : (new_elm.action = { type: EFFECT_TAG.INSERT }, (j += 1));
         } else if (getKey(old_elm) === getKey(new_elm)) {
             clone(old_elm, new_elm);
 
-            actions.push({ type: EFFECT_TAG.UPDATE });
+            new_elm.action = { type: EFFECT_TAG.UPDATE };
 
             i += 1;
             j += 1;
         } else if (!has_old || typeof new_elm_in_old === 'undefined') {
-            !has_old ? (removeElement(old_elm), i += 1) : (actions.push({ type: EFFECT_TAG.INSERT, element: new_elm, before: old_elm }), j += 1);
+            !has_old ? (removeElement(old_elm), (i += 1)) : (new_elm.action = { type: EFFECT_TAG.INSERT, before: old_elm }, (j += 1));
         } else {
             clone(old_ch[new_elm_in_old], new_elm);
 
-            actions.push({ type: EFFECT_TAG.MOVE, element: new_elm, before: old_elm });
-
+            new_elm.action = { type: EFFECT_TAG.MOVE, before: old_elm };
             old_ch[new_elm_in_old] = null;
 
             j += 1;
         }
-    } // old_ch = [A, E, C, B = null, D], new_ch = [B, A, C];
-
-    return actions;
+    } // old_ch = [A, E, C, B = null, D], new_ch = [B, C, A];
 }
 
 export const updateElement = (node: any, props?: Attributes, old_props?: Attributes) => {
@@ -158,26 +174,26 @@ export const updateElement = (node: any, props?: Attributes, old_props?: Attribu
         if (old_value === new_value || k === "children") continue;
 
         if (k === "style") {
-            for (const s of Object.keys(old_value)) {
-                const v = new_value[s];
+            for (const s of Object.keys(old_value ?? {})) {
+                const v = new_value?.[s];
 
                 old_value[s] !== v && (node[k][s] = v ?? "");
             }
 
-            for (const s of Object.keys(new_value)) !(s in old_value) && (node[k][s] = new_value[s]);
+            for (const s of Object.keys(new_value)) !(s in (old_value ?? {})) && (node[k][s] = new_value[s]);
         } else if (k.startsWith("on")) {
-            const event_name = k.slice(2).toLowerCase();
+            const e = k.slice(2).toLowerCase();
 
-            old_value && node.removeEventListener(event_name, old_value);
+            node.removeEventListener(e, old_value);
 
-            isFunction(new_value) && node.addEventListener(event_name, new_value);
+            isFunction(new_value) && node.addEventListener(e, new_value);
         } else if (k in node && !(node instanceof SVGElement)) node[k] = new_value ?? "";
         else new_value ? node.setAttribute(k, new_value) : node.removeAttribute(k);
     }
 };
 
 export const createElement = (fiber: Fiber) => {
-    const node = fiber.type === "#text" ? document.createTextNode("") : fiber.lane! & EFFECT_TAG.SVG ? document.createElementNS("http://www.w3.org/2000/svg", fiber.type as string) : document.createElement(fiber.type as string); 
+    const node = fiber.type === "text" ? document.createTextNode("") : fiber.lane! & EFFECT_TAG.SVG ? document.createElementNS("http://www.w3.org/2000/svg", fiber.type as string) : document.createElement(fiber.type as string); 
 
     updateElement(node, fiber.props);
 
@@ -190,17 +206,66 @@ export const createHostNode = (fiber: Fiber) => {
     return createElement(fiber);
 }
 
-export const getSibling = (fiber: Fiber) => {};
+export const commit = (fiber?: Fiber) => {
+    if (!fiber) return;
 
-export const updateHook = (fiber: Fiber) => {};
+    const { type, before } = fiber.action ?? {};
 
-export const updateHost = (fiber: Fiber) => {
-    fiber.parent_node = isFunction(fiber.parent?.type) ? getParentNode(fiber.parent!) : fiber.parent?.node;
-    fiber.node ??= createHostNode(fiber);
+    if (type) {
+        if (fiber.is_comp) {
+            fiber.child && (fiber.child.action!.type |= type)
+
+            if (fiber.child?.sibling) {
+                let kid: Fiber | undefined = fiber.child.sibling;
+
+                while (kid) {
+                    kid.action!.type |= type;
+                    kid = kid.sibling;
+                }
+            }
+        } else {
+           type & EFFECT_TAG.INSERT || type & EFFECT_TAG.MOVE ? fiber.parent_node?.insertBefore(fiber.node, before?.node) : updateElement(fiber.node, fiber.alternate?.props ?? {}, fiber.props);
+        }
+    }
+
+    fiber.action = null;
+
+    commit(fiber.child);
+    commit(fiber.sibling);
+}
+
+export const getSibling = (fiber?: Fiber) => {
+    while (fiber) {
+        // buble(fiber);
+        if (fiber.is_dirty) {
+            fiber.is_dirty = false;
+            
+            commit(fiber);
+            
+            return null;
+        }
+
+        if (fiber.sibling) return fiber.sibling;
+
+        fiber = fiber.parent;
+    }
+
+    return null;
 };
 
-export const reconciliation = (fiber: Fiber) => {
-    while (fiber && !shouldYield()) fiber = capture(fiber);
+export const reconciliation = (fiber: Fiber | null) => {
+    while (fiber && !shouldYield()) {
+        if ((fiber.is_comp = isFunction(fiber.type))) {
+            _INTERNAL_STATE.current_fiber = fiber;
+        } else {
+            fiber.type !== "root" && (fiber.parent_node = isFunction(fiber.parent?.type) ? getParentNode(fiber.parent!) : fiber.parent?.node);
+            fiber.node ??= createHostNode(fiber);
+        }
+
+        reconcileChildren(fiber!);
+
+        fiber = fiber.child ?? getSibling(fiber);
+    }
 
     return fiber ? () => reconciliation(fiber) : null;
-}
+};
