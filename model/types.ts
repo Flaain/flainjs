@@ -8,7 +8,7 @@ export interface FC<P extends Attributes = {}> {
 
 export interface Action {
     type: Exclude<EFFECT_TAG, EFFECT_TAG.DIRTY | EFFECT_TAG.SVG>;
-    before?: Fiber;
+    before?: Fiber | null;
 }
 
 export type V_NODE_TYPE = keyof HTMLElementTagNameMap | "text" | "root" | "svg" | FC;
@@ -50,15 +50,25 @@ export interface V_NODE<P extends Attributes = any, T = V_NODE_TYPE> {
 export interface Task {
     callback: () => any;
     retries: number;
-    priority: PRIORITY_LEVEL;
     created_at: number;
+    priority?: PRIORITY_LEVEL;
 }
+
+export interface Hook {
+    cursor: number;
+    list: Array<Effect>;
+    layout: Array<Effect>;
+    effect: Array<Effect>;
+}
+
+export type Effect = [Function?, number?, Function?];
 
 export interface Fiber<P extends Attributes = any> {
     key?: null | string;
     type: V_NODE_TYPE;
     node: any;
     children?: any;
+    related_with?: Fiber;
     is_dirty: boolean;
     effect_tag?: EFFECT_TAG;
     parent?: Fiber<P>;
@@ -68,7 +78,7 @@ export interface Fiber<P extends Attributes = any> {
     alternate?: Fiber<P>;
     done?: () => void;
     // ref: ;
-    // hooks: ;
+    hooks?: Hook;
     action?: Action | null;
     props?: P;
     lane?: number;

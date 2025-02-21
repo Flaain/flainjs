@@ -8,8 +8,6 @@
     "skipLibCheck": true,
     "jsxFactory": "h",
     "jsxFragmentFactory": "Fragment",
-    "baseUrl": ".",    
-    "paths": { "@/*": ["./src/*"] },
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -24,5 +22,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"],
+  "include": ["model", "utils"],
 }

@@ -1,4 +1,4 @@
-import { render } from "./shared/lib/flact";
+import { render } from "../index";
 
 const App = ({ children }) => {
     return (
