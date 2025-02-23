@@ -122,6 +122,12 @@ export const reconcileChildren = (fiber: Fiber) => {
 
         prev = child;
     }
+
+    for (let i = 0; i < old_ch.length; i += 1) {
+        const elm = old_ch[i];
+
+        elm?.action?.type! & EFFECT_TAG.REMOVE && !elm?.related_with && removeElement(elm!);
+    }
 };
 
 export const clone = (a: any, b: any) => {
@@ -133,7 +139,6 @@ export const clone = (a: any, b: any) => {
 };
 
 export const removeElement = (fiber: Fiber) => {
-    console.log('deleted', fiber)
     if (fiber.is_comp) {
         fiber.children.forEach(removeElement);
     } else {
@@ -142,55 +147,58 @@ export const removeElement = (fiber: Fiber) => {
 };
 
 export const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
-    const old_map: Record<string, Array<number>> = {}, new_map: Record<string, any> = {}, old_l = old_ch.length, new_l = new_ch.length;
-    
+    const old_map: Record<string, Array<number> | null> = {}, new_map: Record<string, any> = {}, old_l = old_ch.length, new_l = new_ch.length;
+
     let i = 0, j = 0;
-    const testarr = [
-        { type: "span" },
-        { type: "span" },
-        { type: "button", props: {} },
-        { type: "div" },
-    ];                                          
-    const testarr2 = [
-        { type: "text" },
-        { type: "span" },
-        { type: "button", props: {} },
-        { type: "button", props: { onClick: () => console.log('test') } },
-        { type: "div" },
-    ];                                          
-    for (let i = 0; i < testarr.length; i += 1) old_map[getKey(testarr[i])] ? old_map[getKey(testarr[i])].push(i) : (old_map[getKey(testarr[i])] = [i]);
+
+    for (let i = 0; i < old_ch.length; i += 1) old_map[getKey(old_ch[i])] ? old_map[getKey(old_ch[i])]!.push(i) : (old_map[getKey(old_ch[i])] = [i]);
+
     for (let i = 0; i < new_l; i += 1) new_map[getKey(new_ch[i])] = i;
-    console.log('old', old_map, '\n new', new_map)
 
-    // while (i < old_l || j < new_l) {
-    //     const old_elm = old_ch[i], new_elm = new_ch[j], new_elm_in_old = old_map[getKey(new_elm)], has_old = typeof new_map?.[getKey(old_elm)] !== "undefined";
+    while (i < old_l || j < new_l) {
+        const old_elm = old_ch[i], new_elm = new_ch[j], old_arr = old_map[getKey(new_elm)], has_old = typeof new_map?.[getKey(old_elm)] !== "undefined";
 
-    //     if (old_elm === null) {
-    //         i += 1;
-    //     } else if (j >= new_l || i >= old_l) {
-    //         j >= new_l ? (removeElement(old_elm), (i += 1)) : (new_elm.action = { type: EFFECT_TAG.INSERT }, (j += 1));
-    //     } else if (getKey(old_elm) === getKey(new_elm)) {
-    //         clone(old_elm, new_elm);
-            
-            
-    //         new_elm.action = { type: EFFECT_TAG.UPDATE };
-    //         old_map[getKey(old_elm)] = null;
+        if (old_elm === null) {
+            i += 1;
+        } else if (j >= new_l || i >= old_l) {
+            j >= new_l ? ((old_elm.action = { type: EFFECT_TAG.REMOVE }), (i += 1)) : ((new_elm.action = { type: EFFECT_TAG.INSERT }), (j += 1));
+        } else if (getKey(old_elm) === getKey(new_elm)) {
+            clone(old_elm, new_elm);
 
-    //         i += 1;
-    //         j += 1;
-    //     } else if (!has_old || typeof new_elm_in_old === 'undefined') {
-    //         !has_old ? (removeElement(old_elm), (i += 1)) : (new_elm.action = { type: EFFECT_TAG.INSERT, before: old_elm }, (j += 1));
-    //     } else {
-    //         clone(old_ch[new_elm_in_old], new_elm);
+            new_elm.action = { type: EFFECT_TAG.UPDATE };
 
-    //         new_elm.action = { type: EFFECT_TAG.MOVE, before: old_ch[new_elm_in_old] };
+            old_map[getKey(old_elm)]?.shift();
 
-    //         old_ch[new_elm_in_old] = null;
+            !old_map[getKey(old_elm)]?.length && (old_map[getKey(old_elm)] = null);
 
-    //         j += 1;
-    //     }
-    // } // old_ch = [span, btn, btn, div], new_ch = [span, div, btn, btn, btn, p];
-}
+            i += 1;
+            j += 1;
+        } else if (!has_old) {
+            old_elm.action = { type: EFFECT_TAG.REMOVE };
+
+            i += 1;
+        } else if (!old_arr) {
+            old_elm.related_with = new_elm;
+            new_elm.action = { type: EFFECT_TAG.INSERT, before: old_elm };
+
+            j += 1;
+        } else {
+            clone(old_ch[old_arr![0]], new_elm);
+
+            old_elm.related_with = new_elm;
+
+            new_elm.action = { type: EFFECT_TAG.MOVE, before: old_elm };
+
+            old_ch[old_arr![0]] = null;
+
+            old_map[getKey(new_elm)]?.shift();
+
+            !old_map[getKey(new_elm)]?.length && (old_map[getKey(new_elm)] = null);
+
+            j += 1;
+        }
+    }
+};
 
 export const updateElement = (node: any, props: Attributes = {}, old_props: Attributes = {}) => {
     for (const k of new Set([...Object.keys(old_props), ...Object.keys(props)])) {
@@ -205,7 +213,7 @@ export const updateElement = (node: any, props: Attributes = {}, old_props: Attr
                 old_value[s] !== v && (node[k][s] = v ?? "");
             }
 
-            for (const s of Object.keys(new_value)) !(s in (old_value ?? {})) && (node[k][s] = new_value[s]);
+            for (const s of Object.keys(new_value ?? {})) !(s in (old_value ?? {})) && (node[k][s] = new_value[s]);
         } else if (k.startsWith("on")) {
             const e = k.slice(2).toLowerCase();
 
@@ -231,28 +239,39 @@ export const createHostNode = (fiber: Fiber) => {
     return createElement(fiber);
 }
 
+export const propagateEffects = (fiber: Fiber | undefined) => {
+    if (!fiber?.child) return;
+
+    fiber.child.action!.type |= fiber.action?.type!;
+
+    if (fiber.child.sibling) {
+        let sibling: Fiber | undefined = fiber.child.sibling;
+                
+        while (sibling) {
+            sibling.action!.type |= fiber.action?.type!;
+            sibling = sibling.sibling;
+        }
+    }
+}
+
+export const applyEffects = (fiber: Fiber) => {
+    if (fiber.action?.type! & EFFECT_TAG.MOVE || fiber.action?.type! & EFFECT_TAG.INSERT) {
+        fiber.parent_node?.insertBefore(fiber.node, fiber.action?.before?.node);
+    }
+
+    if (fiber.action?.type! & EFFECT_TAG.MOVE || fiber.action?.type! & EFFECT_TAG.UPDATE) {
+        updateElement(fiber.node, fiber.props, fiber.alternate?.props);
+    }
+
+    if (fiber.action?.before?.action?.type! & EFFECT_TAG.REMOVE && fiber.action?.before?.related_with === fiber) {
+        removeElement(fiber.action.before);
+    }
+};
+
 export const commit = (fiber?: Fiber) => {
     if (!fiber) return;
 
-    const { type, before } = fiber.action ?? {};
-    
-    if (type) {
-        if (fiber.is_comp) {
-            fiber.child && (fiber.child.action!.type |= type)
-
-            if (fiber.child?.sibling) {
-                let kid: Fiber | undefined = fiber.child.sibling;
-                
-                while (kid) {
-                    kid.action!.type |= type;
-                    kid = kid.sibling;
-                }
-            }
-        } else {
-            (type & EFFECT_TAG.MOVE || type & EFFECT_TAG.INSERT) && fiber.parent_node?.insertBefore(fiber.node, before?.node);
-            (type & EFFECT_TAG.MOVE || type & EFFECT_TAG.UPDATE) && updateElement(fiber.node, fiber.props, fiber.alternate?.props)
-        }
-    }
+    typeof fiber.action?.type !== "undefined" && (fiber.is_comp ? propagateEffects(fiber) : applyEffects(fiber));
 
     fiber.action = null;
 
@@ -297,7 +316,7 @@ export const useReducer = (reducer: any = null, initialState: any) => {
         hook[0] = initialState;
         hook[1] = (v: any) => {
             const data = reducer ? reducer(hook[0], v) : isFunction(v) ? v(hook[0]) : v;
-            console.log(v)
+
             if (hook[0] !== data) {
                 hook[0] = data;
 
@@ -324,7 +343,7 @@ export const reconciliation = (fiber: Fiber | null) => {
         reconcileChildren(fiber!);
 
         fiber.hooks && (fiber.hooks.cursor = 0);
-console.log(fiber)
+
         fiber = fiber.child ?? getSibling(fiber);
     }
 
