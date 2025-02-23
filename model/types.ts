@@ -6,6 +6,8 @@ export interface FC<P extends Attributes = {}> {
     shouldUpdate?: (newProps: P, oldProps: P) => boolean;
 }
 
+export type EFFECT_TYPE = 'effect' | 'layout';
+
 export interface Action {
     type: Exclude<EFFECT_TAG, EFFECT_TAG.DIRTY | EFFECT_TAG.SVG>;
     before?: Fiber | null;

@@ -7,6 +7,7 @@ export const arrayfy = (data: any) => (!data ? [] : Array.isArray(data) ? data :
 export const createText = (v: string) => ({ type: 'text', props: { nodeValue: v + '' } });
 export const createTask = (callback: () => void, priority?: PRIORITY_LEVEL): Task => ({ callback, priority, retries: 0, created_at: Date.now() });
 export const handleFCreturn = (v: any) => isPrimitive(v) ? createText(v) : v;
+export const isDepsChanged = (a: Array<any>, b: Array<any>) => !a || a.length !== b.length || b.some((v, i) => !Object.is(v, a[i]));
 export const flat = (arr: Array<any>, target: Array<any> = []) => {
     arr.forEach((v) => Array.isArray(v) ? flat(v, target) : v !== null && typeof v !== 'boolean' && target.push(isPrimitive(v) ? createText(v) : v));
 

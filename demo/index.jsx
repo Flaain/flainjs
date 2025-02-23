@@ -1,11 +1,14 @@
-import { render, useState } from "../index";
-
 const App = ({ children }) => {
-    const [clicked, setClicked] = useState(false);
-    const [count, setCount] = useState(0);
+    const [clicked, setClicked] = Fla.useState(false);
+    const [count, setCount] = Fla.useState(0);
+
+    Fla.useEffect(() => {
+        console.log("count", count);
+    }, []);
 
     return (
         <Comp className='test' style={{ display: "flex", flexDirection: "column" }}>
+            {count === 2 && <p>count is 2</p>}
             {clicked ? "clicked" : <span>not clicked</span>}
             <div style={{ display: "flex", flexDirection: "column" }}>
                 <span>here span inside div</span>
@@ -22,11 +25,11 @@ const App = ({ children }) => {
             >
                 {count ? count : "click me"}
             </button>
-            {!!count && <button onClick={() => console.log("test")}>some another button</button>}
+            {!!count && count <= 10 && <button onClick={() => console.log("test")}>some another button</button>}
         </Comp>
     );
 };
 
 const Comp = ({ children, ...props }) => <section {...props}>{children}</section>;
 
-render(<App>test</App>, document.getElementById("app"));
+Fla.render(<App>test</App>, document.getElementById("app"));

@@ -1,8 +1,8 @@
 import { MAX_TASK_RETRIES, THRESHOLD } from "./model/constants";
-import { Action, Attributes, EFFECT_TAG, FLACT_ERRORS, FLACT_NODE, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, Task, V_NODE } from "./model/types";
-import { arrayfy, createTask, flat, getKey, handleFCreturn, isFunction, isPrimitive } from "./utils";
+import { Action, Attributes, EFFECT_TAG, EFFECT_TYPE, Effect, FLACT_ERRORS, FLACT_NODE, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, Task, V_NODE } from "./model/types";
+import { arrayfy, createTask, flat, getKey, handleFCreturn, isDepsChanged, isFunction, isPrimitive } from "./utils";
 
-export const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
+const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
     {
         root_fiber: null,
         current_fiber: null,
@@ -21,7 +21,7 @@ export const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
     }
 );
 
-export const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...children: Array<V_NODE>): V_NODE => {
+const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...children: Array<V_NODE>): V_NODE => {
     props = props || {};
     children = flat(arrayfy(props.children || children));
 
@@ -33,7 +33,7 @@ export const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, 
     return { type, key, props };
 }
 
-export const render = (vnode: V_NODE, node: HTMLElement) => {
+const render = (vnode: V_NODE, node: HTMLElement) => {
     if (!node) throw new Error(FLACT_ERRORS.APP_CONTAINER);
 
     _INTERNAL_STATE.root_fiber = { type: 'root', node, is_dirty: true, props: { children: vnode } };
@@ -41,9 +41,9 @@ export const render = (vnode: V_NODE, node: HTMLElement) => {
     scheduler(createTask(() => reconciliation(_INTERNAL_STATE.root_fiber!), PRIORITY_LEVEL.IMMEDIATE));
 };
 
-export const Fragment = ({ children }: Pick<Attributes, 'children'>) => children;
+const Fragment = ({ children }: Pick<Attributes, 'children'>) => children;
 
-export const flush = () => {
+const flush = () => {
     _INTERNAL_STATE.scheduler.expires_at = performance.now() + THRESHOLD;
     
     let q = _INTERNAL_STATE.scheduler.queue, t = q[0];
@@ -56,7 +56,7 @@ export const flush = () => {
         } catch (error) {
             console.error(error);
             
-            t.retries > MAX_TASK_RETRIES ? q.shift() : (t.retries += 1);
+            t.retries === MAX_TASK_RETRIES ? q.shift() : (t.retries += 1);
         } finally {
             t = q[0];
         }
@@ -65,7 +65,7 @@ export const flush = () => {
     t && scheduleTask()();
 }
 
-export const scheduler = (t: Task) => {
+const scheduler = (t: Task) => {
     let l = 0, h = _INTERNAL_STATE.scheduler.queue.length, q = _INTERNAL_STATE.scheduler.queue, lt = q[q.length - 1];
 
     if (!lt || typeof t.priority === "undefined") {
@@ -86,7 +86,7 @@ export const scheduler = (t: Task) => {
     scheduleTask(t.priority)();
 };
 
-export const scheduleTask = (priority?: PRIORITY_LEVEL) => {
+const scheduleTask = (priority?: PRIORITY_LEVEL) => {
     if (priority === PRIORITY_LEVEL.IMMEDIATE && typeof queueMicrotask !== "undefined") return () => queueMicrotask(flush);
 
     if (_INTERNAL_STATE.scheduler.channel) {
@@ -100,13 +100,13 @@ export const scheduleTask = (priority?: PRIORITY_LEVEL) => {
     return () => setTimeout(flush);
 }
 
-export const shouldYield = () => performance.now() >= _INTERNAL_STATE.scheduler.expires_at;
+const shouldYield = () => performance.now() >= _INTERNAL_STATE.scheduler.expires_at;
 
-export const getParentNode = (fiber?: Fiber) => {
+const getParentNode = (fiber?: Fiber) => {
     while (fiber = fiber?.parent) if (!fiber.is_comp) return fiber.node;
 }
 
-export const reconcileChildren = (fiber: Fiber) => {
+const reconcileChildren = (fiber: Fiber) => {
     const old_ch = fiber.children ?? [], new_ch = (fiber.children = arrayfy(fiber.is_comp ? handleFCreturn((fiber as any).type(fiber.props)) : fiber.props.children));
 
     diff(old_ch, new_ch);
@@ -130,7 +130,7 @@ export const reconcileChildren = (fiber: Fiber) => {
     }
 };
 
-export const clone = (a: any, b: any) => {
+const clone = (a: any, b: any) => {
     b.hooks = a.hooks;
     b.ref = a.ref;
     b.node = a.node;
@@ -138,7 +138,7 @@ export const clone = (a: any, b: any) => {
     b.alternate = a;
 };
 
-export const removeElement = (fiber: Fiber) => {
+const removeElement = (fiber: Fiber) => {
     if (fiber.is_comp) {
         fiber.children.forEach(removeElement);
     } else {
@@ -146,7 +146,7 @@ export const removeElement = (fiber: Fiber) => {
     }
 };
 
-export const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
+const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
     const old_map: Record<string, Array<number> | null> = {}, new_map: Record<string, any> = {}, old_l = old_ch.length, new_l = new_ch.length;
 
     let i = 0, j = 0;
@@ -200,7 +200,7 @@ export const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
     }
 };
 
-export const updateElement = (node: any, props: Attributes = {}, old_props: Attributes = {}) => {
+const updateElement = (node: any, props: Attributes = {}, old_props: Attributes = {}) => {
     for (const k of new Set([...Object.keys(old_props), ...Object.keys(props)])) {
         const old_value = old_props?.[k], new_value = props?.[k];
 
@@ -225,7 +225,7 @@ export const updateElement = (node: any, props: Attributes = {}, old_props: Attr
     }
 };
 
-export const createElement = (fiber: Fiber) => {
+const createElement = (fiber: Fiber) => {
     const node = fiber.type === "text" ? document.createTextNode("") : fiber.lane! & EFFECT_TAG.SVG ? document.createElementNS("http://www.w3.org/2000/svg", fiber.type as string) : document.createElement(fiber.type as string); 
 
     updateElement(node, fiber.props);
@@ -233,13 +233,13 @@ export const createElement = (fiber: Fiber) => {
     return node;
 }
 
-export const createHostNode = (fiber: Fiber) => {
+const createHostNode = (fiber: Fiber) => {
     fiber.type === 'svg' && (fiber.lane! |= EFFECT_TAG.SVG);
     
     return createElement(fiber);
 }
 
-export const propagateEffects = (fiber: Fiber | undefined) => {
+const propagateEffects = (fiber: Fiber | undefined) => {
     if (!fiber?.child) return;
 
     fiber.child.action!.type |= fiber.action?.type!;
@@ -254,7 +254,7 @@ export const propagateEffects = (fiber: Fiber | undefined) => {
     }
 }
 
-export const applyEffects = (fiber: Fiber) => {
+const applyEffects = (fiber: Fiber) => {
     if (fiber.action?.type! & EFFECT_TAG.MOVE || fiber.action?.type! & EFFECT_TAG.INSERT) {
         fiber.parent_node?.insertBefore(fiber.node, fiber.action?.before?.node);
     }
@@ -268,7 +268,7 @@ export const applyEffects = (fiber: Fiber) => {
     }
 };
 
-export const commit = (fiber?: Fiber) => {
+const commit = (fiber?: Fiber) => {
     if (!fiber) return;
 
     typeof fiber.action?.type !== "undefined" && (fiber.is_comp ? propagateEffects(fiber) : applyEffects(fiber));
@@ -279,9 +279,13 @@ export const commit = (fiber?: Fiber) => {
     commit(fiber.sibling);
 }
 
-export const getSibling = (fiber?: Fiber) => {
+const getSibling = (fiber?: Fiber) => {
     while (fiber) {
-        // buble(fiber);
+        if (fiber.is_comp && fiber.hooks) {
+            const e = fiber.hooks.effect;
+            e.length && scheduler(createTask(() => runEffect(e)));
+        }
+
         if (fiber.is_dirty) {
             fiber.is_dirty = false;
             
@@ -298,18 +302,24 @@ export const getSibling = (fiber?: Fiber) => {
     return null;
 };
 
-export const getHook = () => {
-    const current_fiber = _INTERNAL_STATE.current_fiber;
-    const hooks = current_fiber?.hooks || (current_fiber!.hooks = { cursor: 0, list: [], effect: [], layout: [] });
+const runEffect = (effects: Array<Effect>) => {
+    for (const e of effects) e[2]?.();
+    for (const e of effects) e[2] = e[0]!();
+
+    effects.length = 0;
+}
+
+const getHook = () => {
+    const hooks = _INTERNAL_STATE.current_fiber?.hooks || (_INTERNAL_STATE.current_fiber!.hooks = { cursor: 0, list: [], effect: [], layout: [] });
 
     hooks.cursor >= hooks.list.length && hooks.list.push([]);
 
-    return [hooks.list[hooks.cursor++], current_fiber];
+    return [hooks.list[hooks.cursor++], _INTERNAL_STATE.current_fiber];
 }
 
-export const useState = (initialState: any) => useReducer(null, isFunction(initialState) ? initialState() : initialState);
+const useState = (initialState: any) => useReducer(null, isFunction(initialState) ? initialState() : initialState);
 
-export const useReducer = (reducer: any = null, initialState: any) => {
+const useReducer = (reducer: any = null, initialState: any) => {
     const [hook, current]: any = getHook();
 
     if (!hook.length) {
@@ -331,7 +341,20 @@ export const useReducer = (reducer: any = null, initialState: any) => {
     return hook;
 };
 
-export const reconciliation = (fiber: Fiber | null) => {
+const useEffect = (cb: () => void | (() => void), deps?: Array<any>) => effectImpl(cb, deps!, 'effect');
+
+const effectImpl = (cb: () => void | (() => void), deps: Array<any>, type: EFFECT_TYPE) => {
+    const [hook, current]: any = getHook();
+
+    if (isDepsChanged(hook[1], deps)) {
+        hook[0] = cb;
+        hook[1] = deps;
+
+        current.hooks[type].push(hook);
+    }
+};
+
+const reconciliation = (fiber: Fiber | null) => {
     while (fiber && !shouldYield()) {
         if ((fiber.is_comp = isFunction(fiber.type))) {
             _INTERNAL_STATE.current_fiber = fiber;
@@ -349,3 +372,12 @@ export const reconciliation = (fiber: Fiber | null) => {
 
     return fiber ? () => reconciliation(fiber) : null;
 };
+
+export const Fla = {
+    h,
+    render,
+    useState,
+    useEffect,
+    useReducer,
+    Fragment
+}

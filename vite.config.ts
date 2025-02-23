@@ -2,8 +2,8 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
     esbuild: {
-        jsxFactory: "h",
-        jsxInject: `import { h, Fragment } from '../index'`,
-        jsxFragment: "Fragment",
+        jsxFactory: "Fla.h",
+        jsxInject: `import { Fla } from '../index'`,
+        jsxFragment: "Fla.Fragment",
     },
 });
