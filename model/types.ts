@@ -1,13 +1,21 @@
-export type ROOT_FIBER = Pick<Fiber, 'props' | 'child' | 'children' | 'is_dirty' | 'is_comp' | 'node'> & { type: Extract<V_NODE_TYPE, 'root'> }; 
-export type V_NODE_TYPE = keyof HTMLElementTagNameMap | "text" | "root" | "svg" | FC;
-export type EFFECT_TYPE = 'effect' | 'layout';
-export type FLA_NODE = V_NODE | Array<V_NODE> | string | number | boolean | null | undefined;
-export type REF = ((node: HTMLElement | null) => void) | { current: HTMLElement | null };
-export type Effect = [Function?, number?, Function?];
+export type RootFiber = Pick<Fiber, 'props' | 'child' | 'children' | 'is_dirty' | 'is_comp' | 'node'> & { type: Extract<VNodeType, 'root'> }; 
+export type VNodeType = keyof HTMLElementTagNameMap | "text" | "root" | "svg" | FC;
+export type EffectType = 'effect' | 'layout';
+export type FlaNode = VNode | Array<VNode> | string | number | boolean | null | undefined;
+export type DependencyList = ReadonlyArray<unknown>;
+export type Ref = ((node: HTMLElement | null) => void) | { current: HTMLElement | null };
+export type RefObject<T> = { current: T };
+export type Reducer<S, A> = (state: S, action: A) => S;
+export type ReducerWithoutAction<S> = (state: S) => S;
+export type SetStateAction<S> = S | ((prevState: S) => S);
+export type Initializer<S> = () => S;
+export type Dispatch<V> = (value: V) => void;
 
 export enum FLACT_ERRORS {
     REF_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in REF\nAllowed properties: current",
-    APP_CONTAINER = "App container is missing"
+    APP_CONTAINER = "App container is missing",
+    USE_QUERY_SETTER = "Cannot use dispatch without initial data",
+    USE_QUERY_NO_CALLBACK = "Query callback is missing",
 }
 
 export enum PRIORITY_LEVEL {
@@ -29,10 +37,8 @@ export enum EFFECT_TAG {
     REPLACE = 1 << 7,
 }
 
-export interface RefObj<T> { current: T };
-
 export interface FC<P extends Attributes = {}> {
-    (props: P): V_NODE<P> | null;
+    (props: P): VNode<P> | null;
     fiber?: Fiber;
     type?: string;
     memo?: boolean;
@@ -46,15 +52,15 @@ export interface Action {
 
 
 export interface Attributes extends Record<string, any> {
-    children?: FLA_NODE;
-    ref?: REF | null;
+    children?: FlaNode;
+    ref?: Ref | null;
     key?: string | null;
 }
 
-export interface V_NODE<P extends Attributes = any, T = V_NODE_TYPE> {
+export interface VNode<P extends Attributes = any, T = VNodeType> {
     type: T;
     props?: P;
-    ref?: REF | null;
+    ref?: Ref | null;
     key?: string | null;
 }
 
@@ -67,15 +73,15 @@ export interface Task {
 
 export interface Hook {
     cursor: number;
-    list: Array<Effect>;
-    layout: Array<Effect>;
-    effect: Array<Effect>;
+    list: Array<any>;
+    layout: Array<any>;
+    effect: Array<any>;
 }
 
 
 export interface Fiber<P extends Attributes = any> {
     key?: null | string;
-    type: V_NODE_TYPE;
+    type: VNodeType;
     node?: any;
     children?: any;
     related_with?: Fiber;
@@ -86,7 +92,7 @@ export interface Fiber<P extends Attributes = any> {
     sibling?: Fiber<P>;
     child?: Fiber<P>;
     alternate?: Fiber<P>;
-    ref?: REF;
+    ref?: Ref;
     hooks?: Hook;
     action?: Action | null;
     props?: P;
@@ -95,7 +101,7 @@ export interface Fiber<P extends Attributes = any> {
 }
 
 export interface INTERNAL_STATE {
-    root_fiber: ROOT_FIBER | null;
+    root_fiber: RootFiber | null;
     current_fiber: Fiber | null;
     scheduler: {
         queue: Array<Task>;
@@ -103,3 +109,69 @@ export interface INTERNAL_STATE {
         expires_at: number;
     };
 }
+
+/* useQuery types */
+export type UseQueryCallback<T> = (params: { signal: AbortSignal }) => Promise<T>;
+
+export interface UseQueryOptions<T> {
+    keys: DependencyList;
+    retry: boolean | number;
+    enabled: boolean;
+    refetchInterval: number;
+    retryDelay: number;
+    onSuccess: (data: T) => void;
+    onSelect: (data: T) => void;
+    onError: (error: unknown) => void;
+}
+
+export enum UseQueryTypes {
+    LOADING = 'loading',
+    SUCCESS = 'success',
+    SET = 'set',
+    REFETCH = 'refetch',
+    RESET = 'reset',
+    ERROR = 'error',
+}
+
+export interface UseQueryConfig {
+    currentAction: UseRunQueryAction | null;
+    abortController: AbortController;
+    retry: number;
+    requested: boolean;
+    mounted: boolean;
+    interval: ReturnType<typeof setInterval> | null;
+    timeout: ReturnType<typeof setTimeout> | null;
+}
+  
+export type UseQueryReturn<T> = {
+    isLoading: boolean;
+    isRefetching: boolean;
+    call: () => Promise<void>;
+    abort: () => void;
+    setData: (v: SetStateAction<Partial<T>>) => void;
+    refetch: () => void;
+    isSuccess: boolean;
+    isError: boolean;
+    data?: T;
+    error?: unknown;
+};
+  
+export interface UseQueryReducerState<T> {
+    data?: T;
+    isLoading: boolean;
+    isSuccess: boolean;
+    isError: boolean;
+    isRefetching: boolean;
+    error?: unknown;
+}
+
+export type UseQueryReducerAction<T = unknown> =
+    | { type: UseQueryTypes.LOADING; payload: { isLoading: boolean } }
+    | { type: UseQueryTypes.SUCCESS; payload: { data: T } }
+    | { type: UseQueryTypes.ERROR; payload: { error: unknown } }
+    | { type: UseQueryTypes.REFETCH; payload: { isRefething: true } }
+    | { type: UseQueryTypes.RESET; payload: { isLoading: false, isRefetching: false } }
+    | { type: UseQueryTypes.SET; payload: { data: T } };
+
+export type UseRunQueryAction = 'init' | 'refetch';
+/* useQuery types */

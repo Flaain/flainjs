@@ -1,6 +1,31 @@
-import { MAX_TASK_RETRIES, THRESHOLD } from "./model/constants";
-import { Attributes, EFFECT_TAG, EFFECT_TYPE, Effect, FLACT_ERRORS, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, RefObj, Task, V_NODE } from "./model/types";
-import { arrayfy, createTask, flat, getKey, handleFCreturn, isDepsChanged, isFunction } from "./utils";
+import { MAX_TASK_RETRIES, THRESHOLD, queryActions } from "./model/constants";
+import { arrayfy, createTask, errorAction, flat, getKey, handleFCreturn, isDepsChanged, isFunction, queryReducer } from "./utils";
+import {
+    Attributes,
+    DependencyList,
+    Dispatch,
+    EFFECT_TAG,
+    EffectType,
+    FLACT_ERRORS,
+    Fiber,
+    INTERNAL_STATE,
+    Initializer,
+    PRIORITY_LEVEL,
+    Reducer,
+    RefObject,
+    SetStateAction,
+    Task,
+    UseQueryCallback,
+    UseQueryConfig,
+    UseQueryOptions,
+    UseQueryReducerAction,
+    UseQueryReducerState,
+    UseQueryReturn,
+    UseQueryTypes,
+    UseRunQueryAction,
+    VNode,
+    VNodeType,
+} from "./model/types";
 
 const _INTERNAL_STATE: INTERNAL_STATE = {
     root_fiber: null,
@@ -12,7 +37,7 @@ const _INTERNAL_STATE: INTERNAL_STATE = {
     },
 };
 
-const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...children: Array<V_NODE>): V_NODE => {
+const h = (type: VNodeType, props?: Attributes | null, ...children: Array<VNode>): VNode => {
     props = props || {};
     children = flat(arrayfy(props.children || children));
 
@@ -27,11 +52,11 @@ const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...chil
     return { type, key, ref: isFunc ? null : ref, props };
 }
 
-const render = (vnode: V_NODE, node: HTMLElement) => {
+const render = (vnode: VNode, node: HTMLElement) => {
     if (!node) throw new Error(FLACT_ERRORS.APP_CONTAINER);
 
     _INTERNAL_STATE.root_fiber = { type: 'root', node, is_dirty: true, props: { children: vnode } };
-    console.log(_INTERNAL_STATE.root_fiber);
+
     scheduler(createTask(() => reconciliation(_INTERNAL_STATE.root_fiber!), PRIORITY_LEVEL.IMMEDIATE));
 };
 
@@ -124,7 +149,7 @@ const reconcileChildren = (fiber: Fiber) => {
     }
 };
 
-const clone = (a: any, b: any) => {
+const clone = (a: Fiber, b: Fiber) => {
     b.hooks = a.hooks;
     b.ref = a.ref;
     b.node = a.node;
@@ -142,12 +167,12 @@ const removeElement = (fiber: Fiber) => {
 };
 
 const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
-    const old_map: Record<string, Array<number> | null> = {}, new_map: Record<string, any> = {}, old_l = old_ch.length, new_l = new_ch.length;
+    const old_map: Record<string, Array<number> | null> = {}, new_map: Record<string, number> = {}, old_l = old_ch.length, new_l = new_ch.length;
 
     let i = 0, j = 0;
 
     for (let i = 0; i < old_ch.length; i += 1) {
-        const key = getKey(old_ch[i]);
+        const key = getKey(old_ch[i]!);
 
         old_map[key] ? old_map[key]!.push(i) : (old_map[key] = [i]);
     }
@@ -155,7 +180,7 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
     for (let i = 0; i < new_l; i += 1) new_map[getKey(new_ch[i])] = i;
 
     while (i < old_l || j < new_l) {
-        const old_elm = old_ch[i], new_elm = new_ch[j], old_arr = old_map[getKey(new_elm)], has_old = typeof new_map?.[getKey(old_elm)] !== "undefined";
+        const old_elm = old_ch[i], new_elm = new_ch[j], old_arr = old_map[getKey(new_elm)], has_old = typeof new_map?.[getKey(old_elm!)] !== "undefined";
 
         if (old_elm === null) {
             i += 1;
@@ -186,7 +211,7 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
         } else {
             const key = getKey(new_elm);
 
-            clone(old_ch[old_arr![0]], new_elm);
+            clone(old_ch[old_arr![0]]!, new_elm);
 
             old_elm.related_with = new_elm;
 
@@ -203,7 +228,7 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
     }
 };
 
-const updateElement = (node: any, props: Attributes = {}, old_props: Attributes = {}) => {
+const updateElement = (node: SVGElement | Text | HTMLElement, props: Attributes = {}, old_props: Attributes = {}) => {
     for (const k of new Set([...Object.keys(old_props), ...Object.keys(props)])) {
         const old_value = old_props?.[k], new_value = props?.[k];
 
@@ -224,7 +249,7 @@ const updateElement = (node: any, props: Attributes = {}, old_props: Attributes 
 
             isFunction(new_value) && node.addEventListener(e, new_value);
         } else if (k in node && !(node instanceof SVGElement)) node[k] = new_value ?? "";
-        else new_value ? node.setAttribute(k, new_value) : node.removeAttribute(k);
+        else !(node instanceof Text) && (new_value ? node.setAttribute(k, new_value) : node.removeAttribute(k));
     }
 };
 
@@ -279,7 +304,7 @@ const applyEffects = (fiber: Fiber) => {
         removeElement(fiber.action.before);
     }
 
-    fiber.ref && (isFunction(fiber.ref) ? (fiber as Fiber & { ref: (node: HTMLElement | null) => void }).ref(fiber.node) : ((fiber as Fiber & { ref: { current: HTMLElement | null } }).ref.current = fiber.node));
+    fiber.ref && (isFunction(fiber.ref) ? fiber.ref(fiber.node) : (fiber.ref.current = fiber.node));
 };
 
 const commit = (fiber?: Fiber) => {
@@ -318,31 +343,31 @@ const getSibling = (fiber?: Fiber) => {
     return null;
 };
 
-const runEffect = (effects: Array<Effect>) => {
+const runEffect = (effects: Array<any>) => {
     for (const e of effects) e[2]?.();
     for (const e of effects) e[2] = e[0]!();
 
     effects.length = 0;
 }
 
-const getHook = () => {
+const getHook = (): readonly [Array<any>, Fiber] => {
     const hooks = _INTERNAL_STATE.current_fiber?.hooks || (_INTERNAL_STATE.current_fiber!.hooks = { cursor: 0, list: [], effect: [], layout: [] });
 
     hooks.cursor >= hooks.list.length && hooks.list.push([]);
 
-    return [hooks.list[hooks.cursor++], _INTERNAL_STATE.current_fiber];
+    return [hooks.list[hooks.cursor++], _INTERNAL_STATE.current_fiber!];
 }
 
-const useState = (initialState: any) => useReducer(null, isFunction(initialState) ? initialState() : initialState);
+const useState = <T>(initialState: T | Initializer<T>) => useReducer<T, SetStateAction<T>>(null!, initialState);
 
-const useReducer = (reducer: any = null, initialState: any) => {
-    const { 0: hook, 1: current }: any = getHook();
+const useReducer = <S, A>(reducer: Reducer<S, A>, initialState: S | Initializer<S>): readonly [S, Dispatch<A>] => {
+    const { 0: hook, 1: current } = getHook();
 
     if (!hook.length) {
-        hook[0] = initialState;
-        hook[1] = (v: any) => {
+        hook[0] = isFunction(initialState) ? initialState() : initialState;
+        hook[1] = (v: A) => {
             const data = reducer ? reducer(hook[0], v) : isFunction(v) ? v(hook[0]) : v;
-
+            
             if (hook[0] !== data) {
                 hook[0] = data;
 
@@ -354,11 +379,11 @@ const useReducer = (reducer: any = null, initialState: any) => {
         };
     }
 
-    return hook;
+    return hook as [S, Dispatch<A>];
 };
 
-const useMemo = (сb: () => any, deps: Array<any>) => {
-    const { 0: hook }: any = getHook();
+const useMemo = <T>(сb: () => T, deps: DependencyList): T => {
+    const { 0: hook } = getHook();
 
     if (isDepsChanged(hook[1], deps)) {
         hook[0] = сb();
@@ -368,8 +393,8 @@ const useMemo = (сb: () => any, deps: Array<any>) => {
     return hook[0];
 }
 
-const useRef = <T>(initialState: T): RefObj<T> => useMemo(() => {
-    const p = new Proxy<RefObj<T>>({ current: initialState }, {
+const useRef = <T>(s: T): RefObject<T> => useMemo(() => {
+    const p = new Proxy<RefObject<T>>({ current: s }, {
         set: (t, p, v) => {
             if (p !== 'current') throw new Error(FLACT_ERRORS.REF_STATE_ASSIGNMENT_DENIED);
 
@@ -380,20 +405,20 @@ const useRef = <T>(initialState: T): RefObj<T> => useMemo(() => {
     return p;
 }, []);
 
-const useCallback = (сb: () => any, deps: Array<any>) => useMemo(() => сb, deps);
+const useCallback = <T extends (...args: Array<any>) => any>(сb: T, deps: DependencyList) => useMemo<T>(() => сb, deps);
 
-const useEffect = (cb: () => void | (() => void), deps?: Array<any>) => effectImpl(cb, deps!, 'effect');
+const useEffect = (cb: () => void | (() => void), deps?: DependencyList) => effectImpl(cb, deps!, 'effect');
 
-const useLayoutEffect = (cb: () => void | (() => void), deps?: Array<any>) => effectImpl(cb, deps!, 'layout');
+const useLayoutEffect = (cb: () => void | (() => void), deps?: DependencyList) => effectImpl(cb, deps!, 'layout');
 
-const effectImpl = (cb: () => void | (() => void), deps: Array<any>, type: EFFECT_TYPE) => {
-    const { 0: hook, 1: current }: any = getHook();
-
+const effectImpl = (cb: () => void | (() => void), deps: DependencyList, type: EffectType) => {
+    const { 0: hook, 1: current } = getHook();
+    
     if (isDepsChanged(hook[1], deps)) {
         hook[0] = cb;
         hook[1] = deps;
 
-        current.hooks[type].push(hook);
+        current.hooks![type].push(hook);
     }
 };
 
@@ -416,6 +441,92 @@ const reconciliation = (fiber: Fiber | null) => {
     return fiber ? () => reconciliation(fiber) : null;
 };
 
+const useQuery = <T>(callback: UseQueryCallback<T>, options?: Partial<UseQueryOptions<T>>): UseQueryReturn<T> => {
+    const { 0: state, 1: dispatch } = useReducer<UseQueryReducerState<T>, UseQueryReducerAction<T>>(queryReducer, {
+        isError: false,
+        isLoading: options?.enabled ?? true,
+        isSuccess: false,
+        isRefetching: false,
+        data: undefined,
+        error: undefined
+    });
+    
+    const config = useRef<UseQueryConfig>({
+        abortController: new AbortController(),
+        currentAction: null,
+        mounted: false, 
+        requested: false,
+        retry: Number(options?.retry) || 0, 
+        interval: null, 
+        timeout: null 
+    });
+
+    const abort = useCallback(() => {
+        config.current.abortController.abort();
+        config.current.abortController = new AbortController();
+    }, [])
+
+    const setData = useCallback((setter: SetStateAction<Partial<T>>) => {
+        if (!state.data) throw new Error(`${FLACT_ERRORS.USE_QUERY_SETTER}.\nCurrent data is: ${JSON.stringify(state.data)}`);
+
+        dispatch({ type: UseQueryTypes.SET, payload: { data: { ...state.data, ...(typeof setter === 'function' ? setter(state.data) : setter) } } });
+    }, [state]);
+    
+    const runQuery = useCallback(async (action: UseRunQueryAction) => {
+        if (!callback) throw new Error(FLACT_ERRORS.USE_QUERY_NO_CALLBACK);
+        
+        try {
+            abort();
+
+            config.current.currentAction !== action && (dispatch(queryActions[action]), (config.current.currentAction = action));
+
+            const data = await callback({ signal: config.current.abortController.signal });
+
+            dispatch({ type: UseQueryTypes.SUCCESS, payload: { data: options?.onSelect?.(data) ?? data } });
+
+            options?.onSuccess?.(data);
+
+            config.current.currentAction = null;
+
+            options?.refetchInterval && (config.current.interval = setInterval(runQuery, options.refetchInterval, 'refetch'));
+        } catch (error) {
+            if (error instanceof Error) {
+                if (config.current.retry > 0) {
+                    config.current.retry -= 1;
+                    
+                    const timeout = setTimeout(() => {
+                        runQuery(action);
+                        clearTimeout(timeout);
+                    }, options?.retryDelay ?? 1000);
+                    
+                    config.current.timeout = timeout;
+                } else {
+                    dispatch(errorAction(error));
+
+                    config.current.currentAction = null;
+                }
+                
+                options?.onError?.(error);
+            }
+        }
+    }, [callback]);
+
+    useEffect(() => {
+        config.current.mounted = true;
+
+        (options?.enabled ?? true) && runQuery('init');
+
+        return () => {
+            abort();
+
+            config.current.interval && clearInterval(config.current.interval);
+            config.current.timeout && clearTimeout(config.current.timeout);
+        };
+    }, options?.keys ?? []);
+
+    return { ...state, setData, abort, call: () => runQuery('init'), refetch: () => runQuery('refetch') }
+};
+
 export const Fla = {
     h,
     render,
@@ -426,5 +537,6 @@ export const Fla = {
     useMemo,
     useCallback,
     useRef,
+    useQuery,
     Fragment
 }

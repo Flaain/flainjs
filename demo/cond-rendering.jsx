@@ -1,3 +1,5 @@
+import { Fla } from '../index';
+
 const App = ({ children }) => {
     const [clicked, setClicked] = Fla.useState(false);
     const [count, setCount] = Fla.useState(0);
