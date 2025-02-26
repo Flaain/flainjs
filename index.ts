@@ -1,43 +1,37 @@
 import { MAX_TASK_RETRIES, THRESHOLD } from "./model/constants";
-import { Action, Attributes, EFFECT_TAG, EFFECT_TYPE, Effect, FLACT_ERRORS, FLACT_NODE, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, Task, V_NODE } from "./model/types";
-import { arrayfy, createTask, flat, getKey, handleFCreturn, isDepsChanged, isFunction, isPrimitive } from "./utils";
+import { Attributes, EFFECT_TAG, EFFECT_TYPE, Effect, FLACT_ERRORS, Fiber, INTERNAL_STATE, PRIORITY_LEVEL, RefObj, Task, V_NODE } from "./model/types";
+import { arrayfy, createTask, flat, getKey, handleFCreturn, isDepsChanged, isFunction } from "./utils";
 
-const _INTERNAL_STATE = new Proxy<INTERNAL_STATE>(
-    {
-        root_fiber: null,
-        current_fiber: null,
-        scheduler: {
-            expires_at: 0,
-            channel: typeof MessageChannel !== "undefined" ? new MessageChannel() : null,
-            queue: [],
-        }
+const _INTERNAL_STATE: INTERNAL_STATE = {
+    root_fiber: null,
+    current_fiber: null,
+    scheduler: {
+        expires_at: 0,
+        channel: typeof MessageChannel !== "undefined" ? new MessageChannel() : null,
+        queue: [],
     },
-    {
-        set: (t, p, v) => {
-            if (typeof t[p as keyof INTERNAL_STATE] === "undefined") throw new Error(FLACT_ERRORS.INTERNAL_STATE_ASSIGNMENT_DENIED);
-
-            return Reflect.set(t, p, v);
-        },
-    }
-);
+};
 
 const h = (type: keyof HTMLElementTagNameMap, props?: Attributes | null, ...children: Array<V_NODE>): V_NODE => {
     props = props || {};
     children = flat(arrayfy(props.children || children));
 
-    const key = props.key ?? null;
+    const key = props.key || null, ref = props.ref ?? null, isFunc = isFunction(type);
 
-    props.key && (props.key = undefined);
+    key && (props.key = undefined);
+
+    !isFunc && ref && (props.ref = undefined);
+
     children.length && (props.children = (children.length > 1 ? children : children[0]));
 
-    return { type, key, props };
+    return { type, key, ref: isFunc ? null : ref, props };
 }
 
 const render = (vnode: V_NODE, node: HTMLElement) => {
     if (!node) throw new Error(FLACT_ERRORS.APP_CONTAINER);
 
     _INTERNAL_STATE.root_fiber = { type: 'root', node, is_dirty: true, props: { children: vnode } };
-    console.log(_INTERNAL_STATE)
+    console.log(_INTERNAL_STATE.root_fiber);
     scheduler(createTask(() => reconciliation(_INTERNAL_STATE.root_fiber!), PRIORITY_LEVEL.IMMEDIATE));
 };
 
@@ -140,6 +134,7 @@ const clone = (a: any, b: any) => {
 
 const removeElement = (fiber: Fiber) => {
     if (fiber.is_comp) {
+        fiber.hooks?.list.forEach((h) => h[2]?.());
         fiber.children.forEach(removeElement);
     } else {
         fiber.parent_node?.removeChild(fiber.node);
@@ -151,7 +146,11 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
 
     let i = 0, j = 0;
 
-    for (let i = 0; i < old_ch.length; i += 1) old_map[getKey(old_ch[i])] ? old_map[getKey(old_ch[i])]!.push(i) : (old_map[getKey(old_ch[i])] = [i]);
+    for (let i = 0; i < old_ch.length; i += 1) {
+        const key = getKey(old_ch[i]);
+
+        old_map[key] ? old_map[key]!.push(i) : (old_map[key] = [i]);
+    }
 
     for (let i = 0; i < new_l; i += 1) new_map[getKey(new_ch[i])] = i;
 
@@ -163,13 +162,15 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
         } else if (j >= new_l || i >= old_l) {
             j >= new_l ? ((old_elm.action = { type: EFFECT_TAG.REMOVE }), (i += 1)) : ((new_elm.action = { type: EFFECT_TAG.INSERT }), (j += 1));
         } else if (getKey(old_elm) === getKey(new_elm)) {
-            clone(old_elm, new_elm);
+            const key = getKey(old_elm);
 
+            clone(old_elm, new_elm);
+            
             new_elm.action = { type: EFFECT_TAG.UPDATE };
 
-            old_map[getKey(old_elm)]?.shift();
-
-            !old_map[getKey(old_elm)]?.length && (old_map[getKey(old_elm)] = null);
+            old_map[key]?.shift();
+            
+            !old_map[key]?.length && (old_map[key] = null);
 
             i += 1;
             j += 1;
@@ -183,6 +184,8 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
 
             j += 1;
         } else {
+            const key = getKey(new_elm);
+
             clone(old_ch[old_arr![0]], new_elm);
 
             old_elm.related_with = new_elm;
@@ -191,9 +194,9 @@ const diff = (old_ch: Array<Fiber | null>, new_ch: Array<Fiber>) => {
 
             old_ch[old_arr![0]] = null;
 
-            old_map[getKey(new_elm)]?.shift();
+            old_map[key]?.shift();
 
-            !old_map[getKey(new_elm)]?.length && (old_map[getKey(new_elm)] = null);
+            !old_map[key]?.length && (old_map[key] = null);
 
             j += 1;
         }
@@ -242,13 +245,20 @@ const createHostNode = (fiber: Fiber) => {
 const propagateEffects = (fiber: Fiber | undefined) => {
     if (!fiber?.child) return;
 
+    const isParentShouldMoved = fiber.action?.type! & EFFECT_TAG.MOVE;
+
     fiber.child.action!.type |= fiber.action?.type!;
+    
+    isParentShouldMoved && (fiber.child.action!.before = fiber.action?.before);
 
     if (fiber.child.sibling) {
         let sibling: Fiber | undefined = fiber.child.sibling;
                 
         while (sibling) {
             sibling.action!.type |= fiber.action?.type!;
+
+            isParentShouldMoved && (sibling.action!.before = fiber.action?.before);
+            
             sibling = sibling.sibling;
         }
     }
@@ -256,6 +266,8 @@ const propagateEffects = (fiber: Fiber | undefined) => {
 
 const applyEffects = (fiber: Fiber) => {
     if (fiber.action?.type! & EFFECT_TAG.MOVE || fiber.action?.type! & EFFECT_TAG.INSERT) {
+        if (isFunction(fiber.action?.before?.type)) while (fiber.action!.before = (fiber.action!.before?.child ?? fiber.action!.before?.sibling)) if (!fiber.action!.before?.is_comp) break;
+
         fiber.parent_node?.insertBefore(fiber.node, fiber.action?.before?.node);
     }
 
@@ -266,6 +278,8 @@ const applyEffects = (fiber: Fiber) => {
     if (fiber.action?.before?.action?.type! & EFFECT_TAG.REMOVE && fiber.action?.before?.related_with === fiber) {
         removeElement(fiber.action.before);
     }
+
+    fiber.ref && (isFunction(fiber.ref) ? (fiber as Fiber & { ref: (node: HTMLElement | null) => void }).ref(fiber.node) : ((fiber as Fiber & { ref: { current: HTMLElement | null } }).ref.current = fiber.node));
 };
 
 const commit = (fiber?: Fiber) => {
@@ -281,8 +295,10 @@ const commit = (fiber?: Fiber) => {
 
 const getSibling = (fiber?: Fiber) => {
     while (fiber) {
-        if (fiber.is_comp && fiber.hooks) {
+        if (fiber.is_comp && (fiber.hooks?.effect || fiber.hooks?.layout)) {
             const e = fiber.hooks.effect;
+
+            fiber.hooks.layout.length && runEffect(fiber.hooks.layout);
             e.length && scheduler(createTask(() => runEffect(e)));
         }
 
@@ -320,7 +336,7 @@ const getHook = () => {
 const useState = (initialState: any) => useReducer(null, isFunction(initialState) ? initialState() : initialState);
 
 const useReducer = (reducer: any = null, initialState: any) => {
-    const [hook, current]: any = getHook();
+    const { 0: hook, 1: current }: any = getHook();
 
     if (!hook.length) {
         hook[0] = initialState;
@@ -341,10 +357,37 @@ const useReducer = (reducer: any = null, initialState: any) => {
     return hook;
 };
 
+const useMemo = (сb: () => any, deps: Array<any>) => {
+    const { 0: hook }: any = getHook();
+
+    if (isDepsChanged(hook[1], deps)) {
+        hook[0] = сb();
+        hook[1] = deps;
+    }
+
+    return hook[0];
+}
+
+const useRef = <T>(initialState: T): RefObj<T> => useMemo(() => {
+    const p = new Proxy<RefObj<T>>({ current: initialState }, {
+        set: (t, p, v) => {
+            if (p !== 'current') throw new Error(FLACT_ERRORS.REF_STATE_ASSIGNMENT_DENIED);
+
+            return Reflect.set(t, p, v);
+        },
+    });
+
+    return p;
+}, []);
+
+const useCallback = (сb: () => any, deps: Array<any>) => useMemo(() => сb, deps);
+
 const useEffect = (cb: () => void | (() => void), deps?: Array<any>) => effectImpl(cb, deps!, 'effect');
 
+const useLayoutEffect = (cb: () => void | (() => void), deps?: Array<any>) => effectImpl(cb, deps!, 'layout');
+
 const effectImpl = (cb: () => void | (() => void), deps: Array<any>, type: EFFECT_TYPE) => {
-    const [hook, current]: any = getHook();
+    const { 0: hook, 1: current }: any = getHook();
 
     if (isDepsChanged(hook[1], deps)) {
         hook[0] = cb;
@@ -378,6 +421,10 @@ export const Fla = {
     render,
     useState,
     useEffect,
+    useLayoutEffect,
     useReducer,
+    useMemo,
+    useCallback,
+    useRef,
     Fragment
 }

@@ -1,19 +1,14 @@
-export interface FC<P extends Attributes = {}> {
-    (props: P): V_NODE<P> | null;
-    fiber?: Fiber;
-    type?: string;
-    memo?: boolean;
-    shouldUpdate?: (newProps: P, oldProps: P) => boolean;
-}
-
-export type EFFECT_TYPE = 'effect' | 'layout';
-
-export interface Action {
-    type: Exclude<EFFECT_TAG, EFFECT_TAG.DIRTY | EFFECT_TAG.SVG>;
-    before?: Fiber | null;
-}
-
+export type ROOT_FIBER = Pick<Fiber, 'props' | 'child' | 'children' | 'is_dirty' | 'is_comp' | 'node'> & { type: Extract<V_NODE_TYPE, 'root'> }; 
 export type V_NODE_TYPE = keyof HTMLElementTagNameMap | "text" | "root" | "svg" | FC;
+export type EFFECT_TYPE = 'effect' | 'layout';
+export type FLA_NODE = V_NODE | Array<V_NODE> | string | number | boolean | null | undefined;
+export type REF = ((node: HTMLElement | null) => void) | { current: HTMLElement | null };
+export type Effect = [Function?, number?, Function?];
+
+export enum FLACT_ERRORS {
+    REF_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in REF\nAllowed properties: current",
+    APP_CONTAINER = "App container is missing"
+}
 
 export enum PRIORITY_LEVEL {
     NO = 0,
@@ -34,19 +29,33 @@ export enum EFFECT_TAG {
     REPLACE = 1 << 7,
 }
 
-export type WithLastElement = HTMLElement & { last?: Fiber | null };
-export type FLACT_NODE = V_NODE | Array<V_NODE> | string | number | boolean | null | undefined;
+export interface RefObj<T> { current: T };
+
+export interface FC<P extends Attributes = {}> {
+    (props: P): V_NODE<P> | null;
+    fiber?: Fiber;
+    type?: string;
+    memo?: boolean;
+    shouldUpdate?: (newProps: P, oldProps: P) => boolean;
+}
+
+export interface Action {
+    type: Exclude<EFFECT_TAG, EFFECT_TAG.DIRTY | EFFECT_TAG.SVG>;
+    before?: Fiber | null;
+}
+
 
 export interface Attributes extends Record<string, any> {
-    key?: null | string;
-    children?: FLACT_NODE;
-    // ref?: Ref;
+    children?: FLA_NODE;
+    ref?: REF | null;
+    key?: string | null;
 }
 
 export interface V_NODE<P extends Attributes = any, T = V_NODE_TYPE> {
     type: T;
     props?: P;
-    key?: null | string;
+    ref?: REF | null;
+    key?: string | null;
 }
 
 export interface Task {
@@ -63,23 +72,21 @@ export interface Hook {
     effect: Array<Effect>;
 }
 
-export type Effect = [Function?, number?, Function?];
 
 export interface Fiber<P extends Attributes = any> {
     key?: null | string;
     type: V_NODE_TYPE;
-    node: any;
+    node?: any;
     children?: any;
     related_with?: Fiber;
     is_dirty: boolean;
     effect_tag?: EFFECT_TAG;
     parent?: Fiber<P>;
-    parent_node?: WithLastElement;
+    parent_node?: HTMLElement;
     sibling?: Fiber<P>;
     child?: Fiber<P>;
     alternate?: Fiber<P>;
-    done?: () => void;
-    // ref: ;
+    ref?: REF;
     hooks?: Hook;
     action?: Action | null;
     props?: P;
@@ -87,13 +94,8 @@ export interface Fiber<P extends Attributes = any> {
     is_comp?: boolean;
 }
 
-export enum FLACT_ERRORS {
-    INTERNAL_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in INTERNAL_STATE\nAllowed properties: root_fiber, current_fiber, scheduler",
-    APP_CONTAINER = "App container is missing",
-}
-
 export interface INTERNAL_STATE {
-    root_fiber: Fiber | null;
+    root_fiber: ROOT_FIBER | null;
     current_fiber: Fiber | null;
     scheduler: {
         queue: Array<Task>;

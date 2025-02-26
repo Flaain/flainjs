@@ -1,6 +1,6 @@
 import { PRIORITY_LEVEL, Task } from "../model/types";
 
-export const getKey = (v: any): string => `${v?.key}_${v?.type}`;
+export const getKey = (v: any): string => `${v?.key}_${isFunction(v?.type) ? v.type.name : v?.type}`;
 export const isPrimitive = (x: any) => typeof x === 'string' || typeof x === 'number';
 export const isFunction = (x: any) => typeof x === 'function';
 export const arrayfy = (data: any) => (!data ? [] : Array.isArray(data) ? data : [data]);
