@@ -13,7 +13,7 @@ export type Initializer<S> = () => S;
 export type Dispatch<V> = (value: V) => void;
 export type PropsWithChildren = { children: FlaNode };
 
-export enum FLACT_ERRORS {
+export enum FLA_ERRORS {
     REF_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in REF\nAllowed properties: current",
     APP_CONTAINER = "App container is missing",
     USE_QUERY_SETTER = "Cannot use dispatch without initial data",

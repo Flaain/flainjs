@@ -7,7 +7,7 @@ import {
     EFFECT_TAG,
     EffectCallback,
     EffectType,
-    FLACT_ERRORS,
+    FLA_ERRORS,
     Fiber,
     INTERNAL_STATE,
     Initializer,
@@ -54,7 +54,7 @@ const h = (type: VNodeType, props?: Attributes | null, ...children: Array<VNode>
 }
 
 const render = (vnode: VNode, node: HTMLElement) => {
-    if (!node) throw new Error(FLACT_ERRORS.APP_CONTAINER);
+    if (!node) throw new Error(FLA_ERRORS.APP_CONTAINER);
 
     _INTERNAL_STATE.root_fiber = { type: 'root', node, is_dirty: true, props: { children: vnode } };
 
@@ -418,7 +418,7 @@ const useMemo = <T>(сb: () => T, deps: DependencyList): T => {
 const useRef = <T>(s: T): RefObject<T> => useMemo(() => {
     const p = new Proxy<RefObject<T>>({ current: s }, {
         set: (t, p, v) => {
-            if (p !== 'current') throw new Error(FLACT_ERRORS.REF_STATE_ASSIGNMENT_DENIED);
+            if (p !== 'current') throw new Error(FLA_ERRORS.REF_STATE_ASSIGNMENT_DENIED);
 
             return Reflect.set(t, p, v);
         },
@@ -470,13 +470,13 @@ const useQuery = <T>(callback: UseQueryCallback<T>, options?: Partial<UseQueryOp
     }, EMPTY_DEPS)
 
     const setData = useCallback((setter: SetStateAction<Partial<T>>) => {
-        if (!state.data) throw new Error(`${FLACT_ERRORS.USE_QUERY_SETTER}.\nCurrent data is: ${JSON.stringify(state.data)}`);
+        if (!state.data) throw new Error(`${FLA_ERRORS.USE_QUERY_SETTER}.\nCurrent data is: ${JSON.stringify(state.data)}`);
 
         dispatch({ type: UseQueryTypes.SET, payload: { data: { ...state.data, ...(isFunction(setter) ? setter(state.data) : setter) } } });
     }, [state]);
 
     const runQuery = useCallback(async (action: UseRunQueryAction) => {
-        if (!callback) throw new Error(FLACT_ERRORS.USE_QUERY_NO_CALLBACK);
+        if (!callback) throw new Error(FLA_ERRORS.USE_QUERY_NO_CALLBACK);
         
         try {
             abort();
@@ -531,7 +531,7 @@ const useQuery = <T>(callback: UseQueryCallback<T>, options?: Partial<UseQueryOp
 };
 
 const useMutableState = <T extends Record<string | number, any>>(initialState: T) => {
-    if (!initialState || typeof initialState !== "object" || Array.isArray(initialState)) throw new Error(FLACT_ERRORS.USE_MUTABLE_STATE_NOT_OBJECT);
+    if (!initialState || typeof initialState !== "object" || Array.isArray(initialState)) throw new Error(FLA_ERRORS.USE_MUTABLE_STATE_NOT_OBJECT);
 
     const { 0: hook, 1: current } = getHook();
 
