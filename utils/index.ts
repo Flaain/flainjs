@@ -16,6 +16,28 @@ export const flat = (arr: Array<any>, target: Array<any> = []) => {
     return target
 };
 
+export const deepEqual = (x: unknown, y: unknown) => {
+    if (typeof x !== "object" || x === null || typeof y !== "object" || y === null) return Object.is(x, y);
+
+    if (x === y) return true;
+
+    if (Array.isArray(x)) {
+        if (!Array.isArray(y) || x.length !== y.length) return false;
+
+        for (let i = 0; i < x.length; i += 1) if (!deepEqual(x[i], y[i])) return false;
+    } else {
+        if (Array.isArray(y)) return false;
+
+        const keys = Object.keys(x);
+
+        if (Object.keys(y).length !== keys.length) return false;
+
+        for (const key of keys) if (!Object.prototype.propertyIsEnumerable.call(y, key) || !deepEqual(x[key as keyof typeof x], y[key as keyof typeof y])) return false;
+    }
+
+    return true;
+}
+
 export const queryReducer = <T>(state: UseQueryReducerState<T>, action: UseQueryReducerAction<T>) => {
     switch (action.type) {
         case UseQueryTypes.LOADING:

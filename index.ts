@@ -1,10 +1,11 @@
-import { MAX_TASK_RETRIES, THRESHOLD, queryActions } from "./model/constants";
-import { arrayfy, createTask, errorAction, flat, getKey, handleFCreturn, isDepsChanged, isFunction, queryReducer } from "./utils";
+import { EMPTY_DEPS, MAX_TASK_RETRIES, THRESHOLD, queryActions } from "./model/constants";
+import { arrayfy, createTask, deepEqual, errorAction, flat, getKey, handleFCreturn, isDepsChanged, isFunction, isPrimitive, queryReducer } from "./utils";
 import {
     Attributes,
     DependencyList,
     Dispatch,
     EFFECT_TAG,
+    EffectCallback,
     EffectType,
     FLACT_ERRORS,
     Fiber,
@@ -56,6 +57,8 @@ const render = (vnode: VNode, node: HTMLElement) => {
     if (!node) throw new Error(FLACT_ERRORS.APP_CONTAINER);
 
     _INTERNAL_STATE.root_fiber = { type: 'root', node, is_dirty: true, props: { children: vnode } };
+
+    console.log(_INTERNAL_STATE.root_fiber);
 
     scheduler(createTask(() => reconciliation(_INTERNAL_STATE.root_fiber!), PRIORITY_LEVEL.IMMEDIATE));
 };
@@ -350,6 +353,32 @@ const runEffect = (effects: Array<any>) => {
     effects.length = 0;
 }
 
+const updateFiber = (fiber: Fiber) => {
+    if (!fiber.is_dirty) {
+        fiber.is_dirty = true;
+        scheduler(createTask(() => reconciliation(fiber)));
+    }
+}
+
+const reconciliation = (fiber: Fiber | null) => {
+    while (fiber && !shouldYield()) {
+        if ((fiber.is_comp = isFunction(fiber.type))) {
+            _INTERNAL_STATE.current_fiber = fiber;
+        } else {
+            fiber.type !== "root" && (fiber.parent_node = isFunction(fiber.parent?.type) ? getParentNode(fiber.parent!) : fiber.parent?.node);
+            fiber.node ??= createHostNode(fiber);
+        }
+
+        reconcileChildren(fiber!);
+
+        fiber.hooks && (fiber.hooks.cursor = 0);
+
+        fiber = fiber.child ?? getSibling(fiber);
+    }
+
+    return fiber ? () => reconciliation(fiber) : null;
+};
+
 const getHook = (): readonly [Array<any>, Fiber] => {
     const hooks = _INTERNAL_STATE.current_fiber?.hooks || (_INTERNAL_STATE.current_fiber!.hooks = { cursor: 0, list: [], effect: [], layout: [] });
 
@@ -368,14 +397,7 @@ const useReducer = <S, A>(reducer: Reducer<S, A>, initialState: S | Initializer<
         hook[1] = (v: A) => {
             const data = reducer ? reducer(hook[0], v) : isFunction(v) ? v(hook[0]) : v;
             
-            if (hook[0] !== data) {
-                hook[0] = data;
-
-                if (!current.is_dirty) {
-                    current.is_dirty = true;
-                    scheduler(createTask(() => reconciliation(current)));
-                }
-            }
+            hook[0] !== data && ((hook[0] = data), updateFiber(current));
         };
     }
 
@@ -403,15 +425,15 @@ const useRef = <T>(s: T): RefObject<T> => useMemo(() => {
     });
 
     return p;
-}, []);
+}, EMPTY_DEPS);
 
 const useCallback = <T extends (...args: Array<any>) => any>(сb: T, deps: DependencyList) => useMemo<T>(() => сb, deps);
 
-const useEffect = (cb: () => void | (() => void), deps?: DependencyList) => effectImpl(cb, deps!, 'effect');
+const useEffect = (cb: EffectCallback, deps?: DependencyList) => effectImpl(cb, deps!, 'effect');
 
-const useLayoutEffect = (cb: () => void | (() => void), deps?: DependencyList) => effectImpl(cb, deps!, 'layout');
+const useLayoutEffect = (cb: EffectCallback, deps?: DependencyList) => effectImpl(cb, deps!, 'layout');
 
-const effectImpl = (cb: () => void | (() => void), deps: DependencyList, type: EffectType) => {
+const effectImpl = (cb: EffectCallback, deps: DependencyList, type: EffectType) => {
     const { 0: hook, 1: current } = getHook();
     
     if (isDepsChanged(hook[1], deps)) {
@@ -420,25 +442,6 @@ const effectImpl = (cb: () => void | (() => void), deps: DependencyList, type: E
 
         current.hooks![type].push(hook);
     }
-};
-
-const reconciliation = (fiber: Fiber | null) => {
-    while (fiber && !shouldYield()) {
-        if ((fiber.is_comp = isFunction(fiber.type))) {
-            _INTERNAL_STATE.current_fiber = fiber;
-        } else {
-            fiber.type !== "root" && (fiber.parent_node = isFunction(fiber.parent?.type) ? getParentNode(fiber.parent!) : fiber.parent?.node);
-            fiber.node ??= createHostNode(fiber);
-        }
-
-        reconcileChildren(fiber!);
-
-        fiber.hooks && (fiber.hooks.cursor = 0);
-
-        fiber = fiber.child ?? getSibling(fiber);
-    }
-
-    return fiber ? () => reconciliation(fiber) : null;
 };
 
 const useQuery = <T>(callback: UseQueryCallback<T>, options?: Partial<UseQueryOptions<T>>): UseQueryReturn<T> => {
@@ -464,14 +467,14 @@ const useQuery = <T>(callback: UseQueryCallback<T>, options?: Partial<UseQueryOp
     const abort = useCallback(() => {
         config.current.abortController.abort();
         config.current.abortController = new AbortController();
-    }, [])
+    }, EMPTY_DEPS)
 
     const setData = useCallback((setter: SetStateAction<Partial<T>>) => {
         if (!state.data) throw new Error(`${FLACT_ERRORS.USE_QUERY_SETTER}.\nCurrent data is: ${JSON.stringify(state.data)}`);
 
-        dispatch({ type: UseQueryTypes.SET, payload: { data: { ...state.data, ...(typeof setter === 'function' ? setter(state.data) : setter) } } });
+        dispatch({ type: UseQueryTypes.SET, payload: { data: { ...state.data, ...(isFunction(setter) ? setter(state.data) : setter) } } });
     }, [state]);
-    
+
     const runQuery = useCallback(async (action: UseRunQueryAction) => {
         if (!callback) throw new Error(FLACT_ERRORS.USE_QUERY_NO_CALLBACK);
         
@@ -522,15 +525,51 @@ const useQuery = <T>(callback: UseQueryCallback<T>, options?: Partial<UseQueryOp
             config.current.interval && clearInterval(config.current.interval);
             config.current.timeout && clearTimeout(config.current.timeout);
         };
-    }, options?.keys ?? []);
+    }, options?.keys ?? EMPTY_DEPS);
 
     return { ...state, setData, abort, call: () => runQuery('init'), refetch: () => runQuery('refetch') }
 };
+
+const useMutableState = <T extends Record<string | number, any>>(initialState: T) => {
+    if (!initialState || typeof initialState !== "object" || Array.isArray(initialState)) throw new Error(FLACT_ERRORS.USE_MUTABLE_STATE_NOT_OBJECT);
+
+    const { 0: hook, 1: current } = getHook();
+
+    const createDeepProxy = useCallback((t: any) => {
+        if (typeof t !== "object" || t === null) return t;
+
+        return new Proxy<any>(t, {
+            get: (t, p) => createDeepProxy(t[p]),
+            set: (t, p, v) => {
+                if (Array.isArray(t)) {
+                    const item = t[p];
+
+                    if (p === "length") {
+                        item !== v && updateFiber(current);
+                    } else if (typeof item !== "undefined") {
+                        !deepEqual(item, v) && updateFiber(current);
+                    } else {
+                        updateFiber(current);
+                    }
+                } else {
+                    !deepEqual(t[p], v) && updateFiber(current);
+                }
+
+                return Reflect.set(t, p, v);
+            },
+        });
+    }, []);
+
+    !hook.length && (hook[0] = createDeepProxy(initialState));
+
+    return hook[0];
+}
 
 export const Fla = {
     h,
     render,
     useState,
+    useMutableState,
     useEffect,
     useLayoutEffect,
     useReducer,

@@ -1,3 +1,5 @@
+import { Fla } from "../index";
+
 const App = () => {
     const [data, setData] = Fla.useState(null);
     const [loading, setLoading] = Fla.useState(true);

@@ -7,14 +7,17 @@ const App = ({ children }) => {
     const someMemoizedValue = Fla.useMemo(() => ({ value: 1 }), []);
     const divRef = Fla.useRef(null);
     const sectionRef = Fla.useRef(null);
+    const data = Fla.useMutableState({ count: 0 });
 
-    Fla.useEffect(() => {
-        console.log("count", count, divRef, sectionRef);
+    console.log("data", data);
+    
+    // Fla.useEffect(() => {
+    //     console.log("count", data.count, divRef, sectionRef);
 
-        return () => {
-            console.log("cleanup");
-        };
-    }, [count]);
+    //     return () => {
+    //         console.log("cleanup");
+    //     };
+    // }, [data.count]);
 
     return (
         <div ref={divRef} {...(count > 2 && { style: { color: "red" } })}>
@@ -22,7 +25,7 @@ const App = ({ children }) => {
             {count > 2 && <p>some dscr above comp</p>}
             <Comp ref={sectionRef} className='test' style={{ display: "flex", flexDirection: "column" }}>
                 {count === 2 && <p>count is 2</p>}
-                {clicked ? "clicked" : <span>not clicked</span>}
+                {data.clicked ? "clicked" : <span>not clicked</span>}
                 <div style={{ display: "flex", flexDirection: "column" }}>
                     <span>here span inside div</span>
                     {count === 10 && <p style={{ color: "red" }}>count is 10</p>}
@@ -32,11 +35,11 @@ const App = ({ children }) => {
                 <span>span</span>
                 <button
                     onClick={() => {
-                        setClicked(true);
-                        setCount(count + 1);
+                        data.count += 1;
+                        data.clicked = true;
                     }}
                 >
-                    {count || "click me"}
+                    {data.count || "click me"}
                 </button>
                 {!!count && count <= 10 && <button onClick={() => console.log("test")}>some another button</button>}
             </Comp>

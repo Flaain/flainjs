@@ -1,21 +1,24 @@
 export type RootFiber = Pick<Fiber, 'props' | 'child' | 'children' | 'is_dirty' | 'is_comp' | 'node'> & { type: Extract<VNodeType, 'root'> }; 
 export type VNodeType = keyof HTMLElementTagNameMap | "text" | "root" | "svg" | FC;
 export type EffectType = 'effect' | 'layout';
-export type FlaNode = VNode | Array<VNode> | string | number | boolean | null | undefined;
+export type EffectCallback = () => void | (() => void);
+export type FlaNode = VNode | Array<VNode> | boolean | null | undefined;
 export type DependencyList = ReadonlyArray<unknown>;
-export type Ref = ((node: HTMLElement | null) => void) | { current: HTMLElement | null };
+export type Ref<T = any> = ((node: T | null) => void) | { current: T | null };
 export type RefObject<T> = { current: T };
 export type Reducer<S, A> = (state: S, action: A) => S;
 export type ReducerWithoutAction<S> = (state: S) => S;
 export type SetStateAction<S> = S | ((prevState: S) => S);
 export type Initializer<S> = () => S;
 export type Dispatch<V> = (value: V) => void;
+export type PropsWithChildren = { children: FlaNode };
 
 export enum FLACT_ERRORS {
     REF_STATE_ASSIGNMENT_DENIED = "Property assignment denied: Cannot define a non-existent property in REF\nAllowed properties: current",
     APP_CONTAINER = "App container is missing",
     USE_QUERY_SETTER = "Cannot use dispatch without initial data",
     USE_QUERY_NO_CALLBACK = "Query callback is missing",
+    USE_MUTABLE_STATE_NOT_OBJECT = 'Cannot use mutable state with non-object initial state',
 }
 
 export enum PRIORITY_LEVEL {
